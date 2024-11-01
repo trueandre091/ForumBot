@@ -3,3 +3,8 @@
 /utils/__pycache__
 /view/__pycache__
 /.idea
+config.txt
+google/credentials.json
+/google/__pycache__
+/fsm/__pycache__
+/db/__pycache__
