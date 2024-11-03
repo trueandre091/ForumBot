@@ -7,7 +7,7 @@ pattern = r"^\d{2} \d{2}:[024]0$"
 
 async def get_username_by_id(user_id: int):
     user = await bot.get_chat(user_id)
-    return user.username
+    return user.username if user.username else f"{user_id} (отсутствует username)"
 
 
 def format_time_ranges(hours):
@@ -46,3 +46,14 @@ def is_time_in_range(time_str, time_range):
 
     # Проверяем, попадает ли время в диапазон
     return start <= time <= end
+
+
+def get_contacts(clb, meeting) -> list[str, str]:
+    if meeting["contact1_id"] == clb.from_user.id:
+        telegram2 = meeting["contact2_id"]
+        telegram1 = meeting["contact1_id"]
+    else:
+        telegram2 = meeting["contact1_id"]
+        telegram1 = meeting["contact2_id"]
+    return [telegram1, telegram2]
+

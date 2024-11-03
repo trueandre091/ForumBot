@@ -1,24 +1,20 @@
+import datetime
+import re
 import sqlite3
 
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message, CallbackQuery, ReplyKeyboardRemove
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram import F
-import re
+from random import choice, shuffle
 
 from fsm.states import ContactForm
 from utils.bot import dp, bot
-from utils.excel import free_times
+from utils.sheet import free_times, insert
 from view.text import get_message
-from utils.fn import format_time_ranges, is_time_in_range, pattern, get_username_by_id
+from utils.fn import get_username_by_id, get_contacts
 import db.database as db
-from view.keyboard import get_accept_kb, main_kb
-
-next_last_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="Назад", callback_data="swipe.back"),
-     InlineKeyboardButton(text="Вперёд", callback_data="swipe.next")],
-    [InlineKeyboardButton(text="Выбрать", callback_data="swipe.choose")]
-])
+from view.keyboard import get_accept_kb, main_kb, times_kb, dates_keyboard, next_last_kb
 
 users = dict()
 
@@ -26,6 +22,7 @@ users = dict()
 class Swipe:
     def __init__(self, msg: Message, items: list[list]):
         self.msg = msg
+        shuffle(items)
         self.items = items
         self.size = len(items)
         self.index = 0
@@ -59,31 +56,38 @@ class Swipe:
                 self.telegram = self.items[self.index][1]
 
     async def choose(self, clb: Message, meeting_id, date_time):
-        await self.msg.edit_text(text=f"Вы выбрали: {self.items[self.index][0]}\n\n"
-                                      f"Приглашение на встречу отправлено @{await get_username_by_id(self.items[self.index][1])}",
-
-                                 parse_mode="HTML")
-        await self.msg.answer(
-            text=get_message('bot_info'), parse_mode="HTML", reply_markup=main_kb
-        )
-        tmp = await db.get_contact_by_telegram(str(clb.from_user.id))
+        meeting = await db.get_meeting_by_id(meeting_id)
+        telegram1, telegram2 = get_contacts(clb, meeting)
+        username1, username2 = await get_username_by_id(telegram1), await get_username_by_id(telegram2)
+        contact1 = await db.get_contact_by_telegram(telegram1)
         kb = get_accept_kb(meeting_id)
 
-        company = f"компании {tmp['company_name']} " if tmp['company_name'] != 'отсутствует' else ""
-        description = f"\nОписание: {tmp['description']} " if tmp['description'] != 'отсутствует' else ""
+        company = f"компании {contact1['company_name']}" if contact1['company_name'] != 'отсутствует' else ""
+        description = f"\nОписание: {contact1['description']} " if contact1['description'] != 'отсутствует' else ""
 
         txt = (
             f"Здравствуйте! Вам поступило предложение встретиться 🗨️\n"
             f"<b>{date_time[0]} ноября {date_time[1]}</b>\n"
-            f"{tmp['contact_position']} {company} {tmp['contact_name']} "
+            f"{contact1['contact_position']} {company} {contact1['contact_name']} "
             f"{description}\n\n"
-            f"Телеграм: @{await get_username_by_id(tmp['telegram'])}\n"
-            f"Телефон: {tmp['phone']}\n"
+            f"Телеграм: @{await get_username_by_id(contact1['telegram'])}\n"
+            f"Телефон: {contact1['phone']}\n"
         )
-
-        await bot.send_message(chat_id=str(self.items[self.index][1]), text=txt, reply_markup=kb, parse_mode="HTML")
+        try:
+            await bot.send_message(chat_id=str(self.items[self.index][1]), text=txt, reply_markup=kb, parse_mode="HTML")
+            await self.msg.edit_text(text=f"Вы выбрали: {self.items[self.index][0]}\n\n"
+                                          f"<b>Приглашение на встречу отправлено</b> @{username2}",
+                                     parse_mode="HTML")
+        except:
+            await self.msg.edit_text(text=f"<b>Приглашение на встречу не было отправлено</b> @{username2}"
+                                          f"\nПользователь запретил отправку сообщений.",
+                                     parse_mode="HTML")
+            await db.delete_contact_by_telegram(self.items[self.index][1])
+        finally:
+            await self.msg.answer(text=get_message('bot_info'), parse_mode="HTML", reply_markup=main_kb)
 
         users.pop(self.msg.from_user.id, None)
+        await insert(meeting["table_num"], meeting["time"], int(meeting["date"]), username1, username2, "Бронь")
 
 
 async def reply_swipe(msg: CallbackQuery, items: list):
@@ -127,41 +131,49 @@ async def swipe_choose_contact(clb: CallbackQuery, state: FSMContext):
     times_15 = [i[3:] for i in ft.keys() if i[:2] == "15" and i[3:5] in meeting_times_15]
     await state.update_data(times_14=times_14)
     await state.update_data(times_15=times_15)
+    await state.update_data(telegram2=swp.telegram)
 
-    message_id = await clb.message.reply(
-        text=f"<b>Выберите время встречи:</b>\n\n<b>Свободные даты и время:</b>\n🗓️ 14 ноября: {', '.join(times_14)}\n\n"
-             f"🗓️ 15 ноября: {', '.join(times_15)}\n\n", parse_mode="HTML")
-    await state.set_state(ContactForm.time_choose)
-    await state.update_data(info_msg_id=message_id.message_id)
-    await reply_swipe(clb,
-                      [[f"14 ноября {a}", swp.telegram, a] for a in times_14] + [[f"15 ноября {a}", swp.telegram, a] for
-                                                                                 a in times_15])
+    message = await clb.message.edit_text(
+        text=f"<b>Выберите время встречи:</b>\n\n<b>Свободные даты и время:</b>\n"
+             f"🗓️ 14 ноября: {', '.join(times_14)}\n\n"
+             f"🗓️ 15 ноября: {', '.join(times_15)}\n\n",
+        parse_mode="HTML",
+        reply_markup=dates_keyboard
+    )
 
 
-@dp.callback_query(StateFilter(ContactForm.time_choose), F.data == "swipe.choose")
-async def swipe_choose_time(clb: CallbackQuery, state: FSMContext):
+@dp.callback_query(lambda c: c.data in ["14", "15"])
+async def swipe_choose_date(clb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    await bot.delete_message(chat_id=clb.from_user.id, message_id=data['info_msg_id'])
-    await state.clear()
+    times = data[f"times_{clb.data}"]
 
+    await state.update_data(date=str(clb.data))
+    message = await clb.message.edit_reply_markup(reply_markup=times_kb(times))
+
+    await state.set_state(ContactForm.time_choose)
+
+
+@dp.callback_query(StateFilter(ContactForm.time_choose), lambda c: re.match(r'^[0-2][0-9]:[0-5][0-9]$', c.data))
+async def swipe_choose_time(clb: CallbackQuery, state: FSMContext):
     swp = users.get(clb.from_user.id)
-    date_time = swp.items[swp.index][0]
     if not swp:
-        await clb.message.answer("Сначала используйте команду /main.")
+        await clb.answer("Сначала используйте команду /main.")
         return
-    user = await db.get_contact_by_telegram(str(swp.items[swp.index][1]))
 
-    date = date_time.split()[0]
-    time = date_time.split()[2]
+    data = await state.get_data()
+    telegram2 = data["telegram2"]
+
+    date = data["date"]
+    time = clb.data
 
     ft = await free_times()
-    table = ft[" ".join([date, time])].pop()
+    table = choice(list(ft[" ".join([date, time])]))
 
     data = {
         "date": date,
         "time": time,
         "contact1_id": str(clb.from_user.id),
-        "contact2_id": str(user["telegram"]),
+        "contact2_id": str(telegram2),
         "table_num": table,
         "status": -1
     }

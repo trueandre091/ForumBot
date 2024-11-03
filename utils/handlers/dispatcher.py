@@ -10,7 +10,7 @@ from utils.bot import dp, bot
 from utils.fn import format_time_ranges
 from fsm.states import ContactForm
 import db.database as db
-from view.text import get_message, stikers
+from view.text import get_message, stickers
 from view.keyboard import activity_area_kb, time_kb, main_kb
 
 router = Router()
@@ -26,7 +26,7 @@ async def main(message: types.Message, state: FSMContext):
 @router.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
-    await message.answer_sticker(stikers["dobro"])
+    await message.answer_sticker(stickers["dobro"])
     await message.answer(get_message("forum_info"), parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     await message.answer("1/10 Введите ФИО:", reply_markup=ReplyKeyboardRemove())
     await state.set_state(ContactForm.contact_name)
@@ -188,14 +188,15 @@ async def process_meeting_times_15(message: types.Message, state: FSMContext):
         await message.answer(text=msg, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         try:
             await db.save_contact_to_db(data)
-        except sqlite3.IntegrityError:
+        except sqlite3.IntegrityError as e:
+            print(e)
             try:
                 await db.update_contact_in_db(data)
             except Exception as e:
                 print(e)
                 await message.answer(get_message("error"), parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
 
-        await message.answer_sticker(stikers["info"])
+        await message.answer_sticker(stickers["info"])
         await message.answer(text=get_message("bot_info"), parse_mode="HTML", reply_markup=main_kb)
         return
 

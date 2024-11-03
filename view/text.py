@@ -46,7 +46,7 @@ async def get_card(user):
         return message
 
 
-stikers = {
+stickers = {
     "dobro": "CAACAgIAAxkBAAIIEWcjrLdZn5tMewwl67oJvXMhJawuAAJiWwACj0EZSb3bxXqC4gPONgQ",
     "info": "CAACAgIAAxkBAAIIE2cjrNtoCc01fz7oTgywBODy0GdgAALRXAAC4dgZSeKexlkM8OwKNgQ",
     "time": "CAACAgIAAxkBAAIIFWcjrQ0RFzEBqoFtbr7DOkPlHnxHAAK6YAACKXQYSRJH5eefW3VcNgQ",
@@ -55,4 +55,3 @@ stikers = {
     "okey": "CAACAgIAAxkBAAIIG2cjrTl8f73K_tvX45Qa0OfF8YhpAAJsWAACiYggSUfEu1AyH0zcNgQ",
     "time1": "CAACAgIAAxkBAAIIHWcjrUa_HXKVmgbJpWVLLjuXqphXAAI7XQAC3xggSbTS10bU-UhhNgQ",
 }
-

@@ -38,9 +38,9 @@ def number_kb(n: int):
     buttons = []
     for t in range(n):
         if t % 4:
-            buttons[t//4].append(InlineKeyboardButton(text=str(t+1), callback_data=f"delete {t+1}"))
+            buttons[t // 4].append(InlineKeyboardButton(text=str(t + 1), callback_data=f"delete {t + 1}"))
         else:
-            buttons.append([InlineKeyboardButton(text=str(t+1), callback_data=f"delete {t+1}")])
+            buttons.append([InlineKeyboardButton(text=str(t + 1), callback_data=f"delete {t + 1}")])
     buttons.append([InlineKeyboardButton(text="Назад", callback_data=f"main_menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -53,6 +53,13 @@ delete_kb = InlineKeyboardMarkup(
     ]
 )
 
+next_last_kb = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="Назад", callback_data="swipe.back"),
+     InlineKeyboardButton(text="Вперёд", callback_data="swipe.next")],
+    [InlineKeyboardButton(text="Выбрать", callback_data="swipe.choose")],
+    [InlineKeyboardButton(text="Назад", callback_data="main_menu")]
+])
+
 
 def rating_kb(n):
     buttons = []
@@ -63,3 +70,20 @@ def rating_kb(n):
             buttons.append([InlineKeyboardButton(text=str(t + 1), callback_data=f"rate {t + 1}")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
+dates_keyboard = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="14 ноября", callback_data="14")],
+        [InlineKeyboardButton(text="15 ноября", callback_data="15")]
+    ]
+)
+
+
+def times_kb(times):
+    names = [f"{a}" for a in times]
+    keyboard = [[]]
+    for name in names:
+        if not len(keyboard[-1]) % 4:
+            keyboard.append([])
+        keyboard[-1].append(InlineKeyboardButton(text=name[:5], callback_data=name))
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
