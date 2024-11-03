@@ -9,3 +9,4 @@ google/credentials.json
 /fsm/__pycache__
 /db/__pycache__
 db/DataBase.db
+/utils/handlers/__pycache__
