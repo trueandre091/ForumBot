@@ -8,3 +8,4 @@ google/credentials.json
 /google/__pycache__
 /fsm/__pycache__
 /db/__pycache__
+db/DataBase.db
