@@ -10,3 +10,8 @@ utils/google/credentials.json
 /utils/db/__pycache__
 utils/db/DataBase.db
 /utils/handlers/__pycache__
+/src/utils/__pycache__
+/src/utils/google/__pycache__
+/src/utils/handlers/__pycache__
+/src/view/__pycache__
+/src/utils/db/__pycache__
