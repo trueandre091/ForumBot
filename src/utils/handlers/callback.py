@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 import utils.db.database as db
 from utils.fsm.states import ContactForm
 from utils.bot import dp, bot, threshold_minutes
-from utils.sheet import insert, delete
+from utils.google.sheet import insert, delete
 from utils.fn import get_username_by_id, get_contacts
 from utils.handlers.swiping import reply_swipe
 from view.text import get_card, get_message, stickers

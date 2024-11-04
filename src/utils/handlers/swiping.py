@@ -9,7 +9,7 @@ from random import choice, shuffle
 
 from utils.fsm.states import ContactForm
 from utils.bot import dp, bot
-from utils.sheet import free_times, insert
+from utils.google.sheet import free_times, insert
 from view.text import get_message
 from utils.fn import get_username_by_id, get_contacts
 import utils.db.database as db
