@@ -17,3 +17,4 @@ utils/db/DataBase.db
 /src/utils/db/__pycache__
 src/utils/google/credentials.json
 /src/utils/fsm/__pycache__
+src/utils/db/DataBase.db
