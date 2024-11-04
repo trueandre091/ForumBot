@@ -1,4 +1,5 @@
-from utils.handlers.callback import callback_change_info, callback_change_info, callback_change_info, delete_meeting, no_delete, \
+from utils.handlers.callback import callback_change_info, callback_change_info, callback_change_info, delete_meeting, \
+    no_delete, \
     yes_delete, callback_rate, callback_rate_end, callback_main, callback_change_info, callback_YES, callback_NO
 
 from utils.handlers.dispatcher import main, start, process_contact_name, process_contact_position, process_company_name, \

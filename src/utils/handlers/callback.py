@@ -1,9 +1,9 @@
-from aiogram.exceptions import TelegramForbiddenError
+from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 
-import db.database as db
-from fsm.states import ContactForm
+import utils.db.database as db
+from utils.fsm.states import ContactForm
 from utils.bot import dp, bot, threshold_minutes
 from utils.sheet import insert, delete
 from utils.fn import get_username_by_id, get_contacts
@@ -52,7 +52,10 @@ async def callback_change_info(callback_query: CallbackQuery, state: FSMContext)
         )
         num += 1
 
-    await callback_query.message.edit_text(text=message, reply_markup=number_kb(len(meetings)), parse_mode="HTML")
+    try:
+        await callback_query.message.edit_text(text=message, reply_markup=number_kb(len(meetings)), parse_mode="HTML")
+    except TelegramBadRequest:
+        pass
 
 
 @dp.callback_query(lambda c: c.data[:7] == "delete ")

@@ -1,9 +1,9 @@
 import asyncio
 
-import db.database as db
+import utils.db.database as db
 from utils.bot import bot
 from utils.fn import get_username_by_id
-from utils.sheet import delete
+from utils.google.sheet import delete
 
 
 async def periodic_cleanup(interval_minutes=7, threshold_minutes=15):

@@ -1,4 +1,3 @@
-import datetime
 import re
 import sqlite3
 
@@ -8,12 +7,12 @@ from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram import F
 from random import choice, shuffle
 
-from fsm.states import ContactForm
+from utils.fsm.states import ContactForm
 from utils.bot import dp, bot
 from utils.sheet import free_times, insert
 from view.text import get_message
 from utils.fn import get_username_by_id, get_contacts
-import db.database as db
+import utils.db.database as db
 from view.keyboard import get_accept_kb, main_kb, times_kb, dates_keyboard, next_last_kb
 
 users = dict()

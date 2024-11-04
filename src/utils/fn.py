@@ -2,7 +2,8 @@ from datetime import datetime
 
 from utils.bot import bot
 
-pattern = r"^\d{2} \d{2}:[024]0$"
+pattern_datetime = r"^\d{2} \d{2}:[024]0$"
+pattern_phone = r"^(\+)?((\d{2,3}) ?\d|\d)(([ -]?\d)|( ?(\d{2,3}) ?)){5,12}\d$"
 
 
 async def get_username_by_id(user_id: int):
@@ -56,4 +57,3 @@ def get_contacts(clb, meeting) -> list[str, str]:
         telegram2 = meeting["contact1_id"]
         telegram1 = meeting["contact2_id"]
     return [telegram1, telegram2]
-

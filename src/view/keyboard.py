@@ -1,27 +1,42 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
+activity_area_names = [
+    "Отели", "Рестораны", "Туризм",
+    "Пищевые производства",
+    "Информационные технологии",
+    "Выбор сделан ✍️"
+]
 activity_area_buttons = [
-    [KeyboardButton(text="Отели"), KeyboardButton(text="Рестораны"), KeyboardButton(text="Туризм")],
-    [KeyboardButton(text="Пищевые производства")], [KeyboardButton(text="Информационные технологии")],
-    [KeyboardButton(text="❌ Завершить выбор ❌")]
+    [KeyboardButton(text=activity_area_names[0]), KeyboardButton(text=activity_area_names[1]),
+     KeyboardButton(text=activity_area_names[2])],
+    [KeyboardButton(text=activity_area_names[3])], [KeyboardButton(text=activity_area_names[4])],
+    [KeyboardButton(text=activity_area_names[5])]
 ]
 activity_area_kb = ReplyKeyboardMarkup(keyboard=activity_area_buttons, resize_keyboard=True)
 
-time_buttons = [
-    [KeyboardButton(text="10:00-11:00"), KeyboardButton(text="11:00-12:00")],
-    [KeyboardButton(text="12:00-13:00"), KeyboardButton(text="13:00-14:00")],
-    [KeyboardButton(text="14:00-15:00"), KeyboardButton(text="15:00-16:00")],
-    [KeyboardButton(text="16:00-17:00")],
-    [KeyboardButton(text="❌ Завершить выбор / Отсутствуют ❌")]
-]
+time_names = ["10:00-11:00", "11:00-12:00",
+              "12:00-13:00", "13:00-14:00",
+              "14:00-15:00", "15:00-16:00",
+              "16:00-17:00",
+              "Выбор сделан ✍️"]
+time_buttons = []
+for i in range(len(time_names) - 1):
+    if not i % 2:
+        time_buttons.append([KeyboardButton(text=time_names[i])])
+    else:
+        time_buttons[-1].append(KeyboardButton(text=time_names[i]))
+time_buttons.append([KeyboardButton(text=time_names[-1])])
 time_kb = ReplyKeyboardMarkup(keyboard=time_buttons, resize_keyboard=True)
 
-main_buttons = [
-    [InlineKeyboardButton(text="Изменить информацию о себе", callback_data="change_info")],
-    [InlineKeyboardButton(text="Назначить встречу", callback_data="set_meeting")],
-    [InlineKeyboardButton(text="Мои встречи", callback_data="meetings")],
-    [InlineKeyboardButton(text="Обратиться к организатору", callback_data="help")]
-]
+main_names = {
+    "Изменить информацию о себе": "change_info",
+    "Назначить встречу": "set_meeting",
+    "Мои встречи": "meetings",
+    "Обратиться к организатору": "help"
+}
+main_buttons = []
+for name, data in main_names.items():
+    main_buttons.append([InlineKeyboardButton(text=name, callback_data=data)])
 main_kb = InlineKeyboardMarkup(inline_keyboard=main_buttons)
 
 

@@ -1,8 +1,7 @@
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-
-JSON_KEYFILE = "google/credentials.json"
+JSON_KEYFILE = "utils/google/credentials.json"
 SHEET_NAME = "West Horeca Forum"
 SCOPE = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
@@ -14,6 +13,3 @@ def connect_to_google_sheet():
     worksheet = sheet.sheet1
 
     return worksheet
-
-
-
