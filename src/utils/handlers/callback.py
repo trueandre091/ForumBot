@@ -14,8 +14,9 @@ from view.keyboard import delete_kb, number_kb, main_kb, rating_kb
 
 @dp.callback_query(lambda c: c.data == 'change_info')
 async def callback_change_info(callback_query: CallbackQuery, state: FSMContext):
+    await callback_query.answer("Изменить информацию о себе")
     await state.clear()
-    await callback_query.message.answer("Введите ФИО:", reply_markup=ReplyKeyboardRemove())
+    await callback_query.message.answer(get_message("fio"), reply_markup=ReplyKeyboardRemove())
     await state.set_state(ContactForm.contact_name)
 
 

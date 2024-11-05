@@ -2,15 +2,15 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeybo
 
 activity_area_names = [
     "Отели", "Рестораны", "Туризм",
-    "Пищевые производства",
+    "Пищевые производства", "Культурное наследие",
     "Информационные технологии",
     "Выбор сделан ✍️"
 ]
 activity_area_buttons = [
     [KeyboardButton(text=activity_area_names[0]), KeyboardButton(text=activity_area_names[1]),
      KeyboardButton(text=activity_area_names[2])],
-    [KeyboardButton(text=activity_area_names[3])], [KeyboardButton(text=activity_area_names[4])],
-    [KeyboardButton(text=activity_area_names[5])]
+    [KeyboardButton(text=activity_area_names[3]), KeyboardButton(text=activity_area_names[4])],
+    [KeyboardButton(text=activity_area_names[5])], [KeyboardButton(text=activity_area_names[6])]
 ]
 activity_area_kb = ReplyKeyboardMarkup(keyboard=activity_area_buttons, resize_keyboard=True)
 
@@ -63,16 +63,16 @@ def number_kb(n: int):
 delete_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="Удалить", callback_data=f"yes_delete")],
-        [InlineKeyboardButton(text="Назад", callback_data="no_delete")],
+        [InlineKeyboardButton(text="В основное меню", callback_data="no_delete")],
         [InlineKeyboardButton(text="Оценить", callback_data="rate")]
     ]
 )
 
 next_last_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="Назад", callback_data="swipe.back"),
-     InlineKeyboardButton(text="Вперёд", callback_data="swipe.next")],
+    [InlineKeyboardButton(text="Вернуться к предыдущей визитке", callback_data="swipe.back")],
+    [InlineKeyboardButton(text="Посмотреть следующую визитку", callback_data="swipe.next")],
     [InlineKeyboardButton(text="Выбрать", callback_data="swipe.choose")],
-    [InlineKeyboardButton(text="Назад", callback_data="main_menu")]
+    [InlineKeyboardButton(text="В основное веню", callback_data="main_menu")]
 ])
 
 
