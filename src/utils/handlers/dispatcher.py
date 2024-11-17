@@ -7,12 +7,12 @@ from aiogram.filters import Command, StateFilter
 from aiogram.types import ReplyKeyboardRemove
 from aiogram import Router
 
-from utils.bot import dp
+from utils.bot import dp, ref
 from utils.fn import format_time_ranges, pattern_phone
 from utils.fsm.states import ContactForm
 import utils.db.database as db
 from view.text import get_message, stickers
-from view.keyboard import activity_area_kb, time_kb, main_kb, activity_area_names
+from view.keyboard import activity_area_kb, time_kb, main_kb, activity_area_names, zones_kb
 
 router = Router()
 
@@ -27,6 +27,12 @@ async def main(message: types.Message, state: FSMContext):
 @router.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
     await state.clear()
+    if " " in message.text:
+        speaker = message.text.split()[1]
+        if speaker == ref:
+            await state.update_data(speaker=True)
+    else:
+        await state.update_data(speaker=False)
     await message.answer_sticker(stickers["dobro"])
     await message.answer(get_message("forum_info"), parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     await message.answer(get_message("fio"), parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
@@ -119,9 +125,9 @@ async def process_description(message: types.Message, state: FSMContext):
 @router.message(StateFilter(ContactForm.website))
 async def process_website(message: types.Message, state: FSMContext):
     website = message.text
-    await state.update_data(website=website)  # Сохраняем веб-сайт
+    await state.update_data(website=website)
     await message.answer(get_message("phone"), parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
-    await state.set_state(ContactForm.phone)  # Переход к следующему состоянию
+    await state.set_state(ContactForm.phone)
 
 
 @router.message(StateFilter(ContactForm.phone))
@@ -133,8 +139,21 @@ async def process_phone(message: types.Message, state: FSMContext):
     telegram = message.from_user.id
     await state.update_data(phone=phone)
     await state.update_data(telegram=telegram)
+    data = await state.get_data()
+    if data["speaker"]:
+        await message.answer(get_message("speaker"), parse_mode="HTML", reply_markup=zones_kb)
+        await state.set_state(ContactForm.speaker)
+    else:
+        await message.answer(get_message("times14"), parse_mode="HTML", reply_markup=time_kb)
+        await state.set_state(ContactForm.meeting_times_14)
+
+
+@router.message(StateFilter(ContactForm.speaker))
+async def process_speaker(message: types.Message, state: FSMContext):
+    zone = message.text
+    await state.update_data(zone=zone)
     await message.answer(get_message("times14"), parse_mode="HTML", reply_markup=time_kb)
-    await state.set_state(ContactForm.meeting_times_14)  # Переход к следующему состоянию
+    await state.set_state(ContactForm.meeting_times_14)
 
 
 @router.message(StateFilter(ContactForm.meeting_times_14))
@@ -144,7 +163,7 @@ async def process_meeting_times_14(message: types.Message, state: FSMContext):
         if "meeting_times_14" not in data:
             await state.update_data(meeting_times_14=[None])
         await message.answer(get_message("times15"), parse_mode="HTML", reply_markup=time_kb)
-        await state.set_state(ContactForm.meeting_times_15)  # Переход к следующему состоянию
+        await state.set_state(ContactForm.meeting_times_15)
         return
 
     if "meeting_times_14" in data:
@@ -194,6 +213,8 @@ async def process_meeting_times_15(message: types.Message, state: FSMContext):
                "\n<b>Временные возможности:</b>\n"
                f"14 ноября: {time_14}\n"
                f"15 ноября: {time_15}\n")
+        if data["speaker"]:
+            msg += f"\nЗона встреч с вами: {data['zone']}"
         await message.answer(text=msg, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
         try:
             await db.save_contact_to_db(data)

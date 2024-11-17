@@ -22,7 +22,9 @@ async def create_tables():
                 phone TEXT NOT NULL,
                 telegram TEXT NOT NULL UNIQUE,
                 meeting_times_14 TEXT NOT NULL,
-                meeting_times_15 TEXT NOT NULL
+                meeting_times_15 TEXT NOT NULL,
+                paid TEXT,
+                speaker_place TEXT
             )
         ''')
 
@@ -33,13 +35,14 @@ async def create_tables():
                 time TEXT NOT NULL,
                 contact1_id INTEGER NOT NULL,
                 contact2_id INTEGER NOT NULL,
-                table_num INTEGER NOT NULL,
+                table_num INTEGER,
+                place TEXT,
                 result TEXT,
                 comments TEXT,
                 status INTEGER NOT NULL,
+                last_datetime TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY (contact1_id) REFERENCES contacts (id),
-                FOREIGN KEY (contact2_id) REFERENCES contacts (id),
-                UNIQUE (date, time, table_num)
+                FOREIGN KEY (contact2_id) REFERENCES contacts (id)
             )
         ''')
 
@@ -61,15 +64,16 @@ async def create_tables():
 async def save_contact_to_db(data):
     meeting_times_14 = ",".join(data['meeting_times_14']) if None not in data['meeting_times_14'] else "отсутствуют"
     meeting_times_15 = ",".join(data['meeting_times_15']) if None not in data['meeting_times_15'] else "отсутствуют"
+    zone = None if not data["speaker"] else data["zone"]
     async with aiosqlite.connect(DB_NAME) as db:
         await db.execute('''
             INSERT INTO contacts (contact_name, contact_position, company_name, activity_area, interests, description, 
-                                  website, phone, telegram, meeting_times_14, meeting_times_15)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                  website, phone, telegram, speaker_place, meeting_times_14, meeting_times_15)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             data['contact_name'], data['contact_position'], data['company_name'], ",".join(data['activity_area']),
             ",".join(data['interests']), data['description'], data['website'], data['phone'], data['telegram'],
-            meeting_times_14, meeting_times_15
+            zone, meeting_times_14, meeting_times_15
         ))
         await db.commit()
 
@@ -77,6 +81,7 @@ async def save_contact_to_db(data):
 async def update_contact_in_db(data):
     meeting_times_14 = ",".join(data['meeting_times_14']) if None not in data['meeting_times_14'] else "отсутствуют"
     meeting_times_15 = ",".join(data['meeting_times_15']) if None not in data['meeting_times_15'] else "отсутствуют"
+    zone = None if not data["speaker"] else data["zone"]
 
     query = '''
         UPDATE contacts 
@@ -89,6 +94,7 @@ async def update_contact_in_db(data):
             description = COALESCE(?, description),
             website = COALESCE(?, website),
             phone = COALESCE(?, phone),
+            speaker_place = COALESCE(?, speaker_place),
             meeting_times_14 = COALESCE(?, meeting_times_14),
             meeting_times_15 = COALESCE(?, meeting_times_15)
         WHERE telegram = ?
@@ -104,6 +110,7 @@ async def update_contact_in_db(data):
             data.get('description'),
             data.get('website'),
             data.get('phone'),
+            zone,
             meeting_times_14,
             meeting_times_15,
             data['telegram']
@@ -205,7 +212,8 @@ async def migrate_contacts_table():
                 telegram TEXT NOT NULL UNIQUE,
                 meeting_times_14 TEXT NOT NULL,
                 meeting_times_15 TEXT NOT NULL,
-                paid TEXT
+                paid TEXT,
+                speaker_place TEXT
             )
         ''')
 
@@ -234,10 +242,10 @@ async def migrate_contacts_table():
 async def save_meeting_to_db(data):
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute('''
-            INSERT INTO meetings (date, time, contact1_id, contact2_id, table_num, result, comments, status)
+            INSERT INTO meetings (date, time, contact1_id, contact2_id, place, result, comments, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            data['date'], data['time'], data['contact1_id'], data['contact2_id'], data['table_num'],
+            data['date'], data['time'], data['contact1_id'], data['contact2_id'], data['place'],
             data.get('result', ''), data.get('comments', ''), data['status']
         ))
         await db.commit()
@@ -248,7 +256,7 @@ async def save_meeting_to_db(data):
 async def update_meeting_in_db(meeting_id: int, data):
     query = '''
         UPDATE meetings 
-        SET table_num = COALESCE(?, table_num),
+        SET place = COALESCE(?, place),
             result = COALESCE(?, result),
             comments = COALESCE(?, comments),
             status = COALESCE(?, status)
@@ -257,7 +265,7 @@ async def update_meeting_in_db(meeting_id: int, data):
 
     async with aiosqlite.connect(DB_NAME) as db:
         cursor = await db.execute(query, (
-            data.get('table_num'),
+            data.get('place'),
             data.get('result'),
             data.get('comments'),
             data.get('status'),
@@ -351,17 +359,6 @@ async def delete_meeting_by_id(meeting_id: int) -> bool:
         return cursor.rowcount > 0
 
 
-async def get_meeting_by_table_num(table_num: int) -> dict:
-    """Получает полную строку встречи по номеру стола."""
-    async with aiosqlite.connect(DB_NAME) as conn:
-        cursor = await conn.execute("SELECT * FROM meetings WHERE table_num = ?", (table_num,))
-        result = await cursor.fetchone()
-        if result:
-            columns = [column[0] for column in cursor.description]
-            return dict(zip(columns, result))
-        return None
-
-
 async def get_meeting_by_date_time(date: str, time: str) -> dict:
     """Получает полную строку встречи по дате и времени."""
     async with aiosqlite.connect(DB_NAME) as conn:
@@ -385,18 +382,6 @@ async def get_meeting_by_details(date: str, time: str, contact1_id: int, contact
             columns = [column[0] for column in cursor.description]
             return dict(zip(columns, result))
         return None
-
-
-async def delete_meeting_by_details(date: str, time: str, contact1_id: int, contact2_id: int, table_num: int) -> bool:
-    """Удаляет строку встречи по дате, времени, contact1_id и contact2_id и table_num"""
-    async with aiosqlite.connect(DB_NAME) as conn:
-        cursor = await conn.execute(
-            "DELETE FROM meetings WHERE date = ? AND time = ? AND contact1_id = ? AND contact2_id = ? AND table_num = ?",
-            (date, time, contact1_id, contact2_id, table_num)
-        )
-        await conn.commit()
-        # Проверка количества удаленных строк: если больше нуля, значит удаление прошло успешно
-        return cursor.rowcount > 0
 
 
 async def get_meetings_with_status(status) -> list[dict]:
@@ -447,21 +432,21 @@ async def migrate_meetings_table():
                 time TEXT NOT NULL,
                 contact1_id INTEGER NOT NULL,
                 contact2_id INTEGER NOT NULL,
-                table_num INTEGER NOT NULL,
+                table_num INTEGER,
+                place TEXT,
                 result TEXT,
                 comments TEXT,
                 status INTEGER NOT NULL,
                 last_datetime TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
                 FOREIGN KEY (contact1_id) REFERENCES contacts (id),
-                FOREIGN KEY (contact2_id) REFERENCES contacts (id),
-                UNIQUE (date, time, table_num)
+                FOREIGN KEY (contact2_id) REFERENCES contacts (id)
             )
         ''')
 
         # Копирование данных из старой таблицы в новую
         await cursor.execute('''
-            INSERT INTO new_meetings (id, date, time, contact1_id, contact2_id, table_num, result, comments, status)
-            SELECT id, date, time, contact1_id, contact2_id, table_num, result, comments, status
+            INSERT INTO new_meetings (id, date, time, contact1_id, contact2_id, table_num, place, result, comments, status)
+            SELECT id, date, time, contact1_id, contact2_id, table_num, place, result, comments, status
             FROM meetings
         ''')
 
@@ -475,6 +460,145 @@ async def migrate_meetings_table():
         await conn.commit()
 
         print("Данные успешно перенесены, старая таблица удалена.")
+
+
+# ----------------------------------------------admin--------------------------------------------------
+
+
+async def a_add_contact(**kwargs):
+    """
+    Добавляет новый контакт в таблицу contacts.
+
+    Параметры:
+    - contact_name (str): Обязательный параметр.
+    - contact_position (str): Обязательный параметр.
+    - company_name (str):
+    - activity_area (str): Обязательный параметр.
+    - interests (str): Обязательный параметр.
+    - description (str):
+    - website (str):
+    - phone (str): Обязательный параметр.
+    - telegram (str): Обязательный параметр, должен быть уникальным.
+    - meeting_times_14 (str): Обязательный параметр.
+    - meeting_times_15 (str): Обязательный параметр.
+    - paid (str):
+    - speaker_place (str):
+
+    Возвращает:
+    - id добавленного контакта (целое число).
+    """
+    query = '''
+        INSERT INTO contacts (contact_name, contact_position, company_name, activity_area,
+                              interests, description, website, phone, telegram,
+                              meeting_times_14, meeting_times_15, paid, speaker_place)
+        VALUES (:contact_name, :contact_position, :company_name, :activity_area, :interests,
+                :description, :website, :phone, :telegram, :meeting_times_14,
+                :meeting_times_15, :paid, :speaker_place)
+    '''
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute(query, kwargs) as cursor:
+            await db.commit()
+            return cursor.lastrowid
+
+
+async def a_update_contact(contact_id, **kwargs):
+    """
+    Обновляет информацию о существующем контакте по его id.
+
+    Параметры:
+    - contact_id (int): Идентификатор контакта, который нужно обновить. Обязательный параметр.
+    - Остальные параметры:
+        - contact_name (str): Имя контакта.
+        - contact_position (str): Должность контакта.
+        - company_name (str): Название компании.
+        - activity_area (str): Сфера деятельности.
+        - interests (str): Интересы контакта.
+        - description (str): Описание контакта.
+        - website (str): Вебсайт компании или контакта.
+        - phone (str): Номер телефона.
+        - telegram (str): Telegram-аккаунт.
+        - meeting_times_14 (str): Время для встреч 14.
+        - meeting_times_15 (str): Время для встреч 15.
+        - paid (str): Статус оплаты.
+        - speaker_place (str): Место выступления спикера.
+
+    Возвращает:
+    - Количество обновленных строк (обычно 1, если обновление прошло успешно).
+    """
+    query = f'''
+        UPDATE contacts
+        SET {', '.join([f"{key} = :{key}" for key in kwargs])}
+        WHERE id = :contact_id
+    '''
+    async with aiosqlite.connect(DB_NAME) as db:
+        kwargs['contact_id'] = contact_id
+        async with db.execute(query, kwargs) as cursor:
+            await db.commit()
+            return cursor.rowcount
+
+
+async def a_add_meeting(**kwargs):
+    """
+    Добавляет новую встречу в таблицу meetings.
+
+    Параметры:
+    - date (str): Обязательный параметр.
+    - time (str): Обязательный параметр.
+    - contact1_id (int): Обязательный параметр.
+    - contact2_id (int): Обязательный параметр.
+    - table_num (int):
+    - place (str):
+    - result (str):
+    - comments (str):
+    - status (int): Обязательный параметр.
+    - last_datetime (str): по умолчанию CURRENT_TIMESTAMP
+
+    Возвращает:
+    - id добавленной встречи (целое число).
+    """
+    query = '''
+        INSERT INTO meetings (date, time, contact1_id, contact2_id, table_num,
+                              place, result, comments, status, last_datetime)
+        VALUES (:date, :time, :contact1_id, :contact2_id, :table_num,
+                :place, :result, :comments, :status, :last_datetime)
+    '''
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute(query, kwargs) as cursor:
+            await db.commit()
+            return cursor.lastrowid
+
+
+async def a_update_meeting(meeting_id, **kwargs):
+    """
+    Обновляет информацию о существующей встрече по ее id.
+
+    Параметры:
+    - meeting_id (int): Идентификатор встречи, которую нужно обновить. Обязательный параметр.
+    - Остальные параметры:
+        - date (str): Дата встречи.
+        - time (str): Время встречи.
+        - contact1_id (int): ID первого участника.
+        - contact2_id (int): ID второго участника.
+        - table_num (int): Номер стола.
+        - place (str): Место встречи.
+        - result (str): Результат встречи.
+        - comments (str): Комментарии по встрече.
+        - status (int): Статус встречи.
+        - last_datetime (str): Последняя дата и время обновления записи.
+
+    Возвращает:
+    - Количество обновленных строк (обычно 1, если обновление прошло успешно).
+    """
+    query = f'''
+        UPDATE meetings
+        SET {', '.join([f"{key} = :{key}" for key in kwargs])}
+        WHERE id = :meeting_id
+    '''
+    async with aiosqlite.connect(DB_NAME) as db:
+        kwargs['meeting_id'] = meeting_id
+        async with db.execute(query, kwargs) as cursor:
+            await db.commit()
+            return cursor.rowcount
 
 
 async def drop_table():

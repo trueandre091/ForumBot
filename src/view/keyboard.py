@@ -1,4 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from utils.bot import zones
 
 activity_area_names = [
     "Отели", "Рестораны", "Туризм",
@@ -13,6 +14,18 @@ activity_area_buttons = [
     [KeyboardButton(text=activity_area_names[5])], [KeyboardButton(text=activity_area_names[6])]
 ]
 activity_area_kb = ReplyKeyboardMarkup(keyboard=activity_area_buttons, resize_keyboard=True)
+
+zones_buttons = [
+    [KeyboardButton(text=zones[0])], [KeyboardButton(text=zones[1])], [KeyboardButton(text=zones[2])]
+]
+zones_kb = ReplyKeyboardMarkup(keyboard=zones_buttons, resize_keyboard=True)
+
+zones_buttons = [
+    [InlineKeyboardButton(text=zones[0], callback_data=zones[0])],
+    [InlineKeyboardButton(text=zones[1], callback_data=zones[1])],
+    [InlineKeyboardButton(text=zones[2], callback_data=zones[2])]
+]
+zones_inline_kb = InlineKeyboardMarkup(inline_keyboard=zones_buttons)
 
 time_names = ["10:00-11:00", "11:00-12:00",
               "12:00-13:00", "13:00-14:00",
@@ -69,8 +82,8 @@ delete_kb = InlineKeyboardMarkup(
 )
 
 next_last_kb = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="Вернуться к предыдущей визитке", callback_data="swipe.back")],
     [InlineKeyboardButton(text="Посмотреть следующую визитку", callback_data="swipe.next")],
+    [InlineKeyboardButton(text="Вернуться к предыдущей визитке", callback_data="swipe.back")],
     [InlineKeyboardButton(text="Выбрать", callback_data="swipe.choose")],
     [InlineKeyboardButton(text="В основное веню", callback_data="main_menu")]
 ])
