@@ -3,7 +3,6 @@
 /utils/__pycache__
 /view/__pycache__
 /.idea
-src/config.txt
 utils/google/credentials.json
 /utils/google/__pycache__
 /utils/fsm/__pycache__
