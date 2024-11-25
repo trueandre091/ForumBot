@@ -1,24 +1,52 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
-from utils.bot import zones
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from utils.config import load_config
 
-activity_area_names = [
-    "Отели", "Рестораны", "Туризм",
-    "Пищевые производства", "Культурное наследие",
-    "Информационные технологии",
-    "Выбор сделан ✍️"
-]
-activity_area_buttons = [
-    [KeyboardButton(text=activity_area_names[0]), KeyboardButton(text=activity_area_names[1]),
-     KeyboardButton(text=activity_area_names[2])],
-    [KeyboardButton(text=activity_area_names[3]), KeyboardButton(text=activity_area_names[4])],
-    [KeyboardButton(text=activity_area_names[5])], [KeyboardButton(text=activity_area_names[6])]
-]
-activity_area_kb = ReplyKeyboardMarkup(keyboard=activity_area_buttons, resize_keyboard=True)
+config = load_config()
+zones = config['meeting']['zones']
 
-zones_buttons = [
-    [KeyboardButton(text=zones[0])], [KeyboardButton(text=zones[1])], [KeyboardButton(text=zones[2])]
+activity_areas = [
+    "Ресторан",
+    "Кафе",
+    "Бар",
+    "Кофейня",
+    "Столовая",
+    "Фастфуд",
+    "Кейтеринг",
+    "Отель",
+    "Хостел",
+    "Гостиница",
+    "Санаторий",
+    "Пансионат",
+    "Поставщик продуктов питания",
+    "Поставщик оборудования",
+    "Поставщик посуды и инвентаря",
+    "Поставщик мебели",
+    "Поставщик текстиля",
+    "Поставщик услуг автоматизации",
+    "Поставщик систем безопасности",
+    "Поставщик клининговых услуг",
+    "Другое"
 ]
-zones_kb = ReplyKeyboardMarkup(keyboard=zones_buttons, resize_keyboard=True)
+
+def create_activity_area_kb():
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=area)] for area in activity_areas
+        ] + [[KeyboardButton(text="Выбор сделан ✍️")]],
+        resize_keyboard=True
+    )
+    return keyboard
+
+activity_area_kb = create_activity_area_kb()
+
+def create_zones_kb():
+    keyboard = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=zone)] for zone in zones],
+        resize_keyboard=True
+    )
+    return keyboard
+
+zones_kb = create_zones_kb()
 
 zones_buttons = [
     [InlineKeyboardButton(text=zones[0], callback_data=zones[0])],

@@ -1,0 +1,20 @@
+---  # начало документа
+bot:
+  api: "7958921451:AAGStHA2bBcNzkLeNFrZH_kZW5xj4904VHw"
+  ref: "speaker"
+
+settings:
+  number_of_tables: 20
+  threshold_minutes: 15
+
+admins:
+  ids: [842861093]
+
+meeting:
+  zones:
+    - "Зона b2b встреч - 1 этаж"
+    - "Зона b2b встреч - 2 этаж"
+    - "Зона b2b встреч - 3 этаж"
+  dates:
+    - "29 ноября"
+    - "30 ноября"

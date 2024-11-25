@@ -1,5 +1,6 @@
 import re
 import sqlite3
+import json
 
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
@@ -8,12 +9,16 @@ from aiogram import F
 from random import choice, shuffle
 
 from utils.fsm.states import ContactForm
-from utils.bot import dp, bot, zones
-from utils.google.sheet import free_times, insert
+from utils.bot import dp, bot
+from utils.config import load_config
 from view.text import get_message
 from utils.fn import get_username_by_id, get_contacts, get_meetings_times
 import utils.db.database as db
 from view.keyboard import get_accept_kb, main_kb, times_kb, dates_keyboard, next_last_kb, zones_inline_kb
+
+# Получаем зоны из конфига
+config = load_config()
+zones = config['meeting']['zones']
 
 users = dict()
 
@@ -120,18 +125,22 @@ async def swipe_choose_contact(clb: CallbackQuery, state: FSMContext):
     if not swp:
         await clb.answer("Сначала используйте команду /main.")
         return
+        
     user = await db.get_contact_by_telegram(str(swp.telegram))
-    meeting_times_14 = user["meeting_times_14"].split(",")
-    meeting_times_15 = user["meeting_times_15"].split(",")
-
-    times_14, times_15 = get_meetings_times(meeting_times_14, meeting_times_15)
-    await state.update_data(times_14=times_14)
-    await state.update_data(times_15=times_15)
+    meeting_times = json.loads(user["meeting_times"])
+    
+    # Получаем времена встреч для всех дат
+    times_dict = get_meetings_times(meeting_times)
+    await state.update_data(times_dict=times_dict)
     await state.update_data(telegram2=swp.telegram)
 
-    text = (f"<b>Выберите время встречи:</b>\n\n<b>Свободные даты и время:</b>\n"
-            f"🗓️ 14 ноября: {', '.join(times_14)}\n\n"
-            f"🗓️ 15 ноября: {', '.join(times_15)}\n\n")
+    config = load_config()
+    
+    text = "<b>Выберите время встречи:</b>\n\n<b>Свободные даты и время:</b>\n"
+    for date in config['meeting']['dates']:
+        times = times_dict.get(date, [])
+        text += f"🗓️ {date}: {', '.join(times)}\n\n"
+
     if user["speaker_place"]:
         text = f"<b>Спикер форума</b>\n" + text
         text += f"<b>Место встречи</b>: {user['speaker_place']}"
@@ -142,8 +151,10 @@ async def swipe_choose_contact(clb: CallbackQuery, state: FSMContext):
         )
         await state.update_data(place=user["speaker_place"])
     else:
-        text += (f"<b>Зоны встреч</b>:\n"
-                 f"{zones[0]}\n{zones[1]}\n{zones[2]}")
+        text += "<b>Зоны встреч</b>:\n"
+        for zone in config['meeting']['zones']:
+            text += f"{zone}\n"
+            
         message = await clb.message.edit_text(
             text=text,
             parse_mode="HTML",
@@ -160,12 +171,19 @@ async def swipe_choose_place(clb: CallbackQuery, state: FSMContext):
     await state.set_state(ContactForm.set_meeting)
 
 
-@dp.callback_query(lambda c: c.data in ["14", "15"])
+@dp.callback_query(lambda c: c.data in [date.split()[0] for date in load_config()['meeting']['dates']])
 async def swipe_choose_date(clb: CallbackQuery, state: FSMContext):
     data = await state.get_data()
-    times = data[f"times_{clb.data}"]
+    times_dict = data["times_dict"]
+    
+    # Находим полную дату по числу
+    config = load_config()
+    selected_date = next(date for date in config['meeting']['dates'] 
+                        if date.startswith(clb.data))
+    
+    times = times_dict.get(selected_date, [])
 
-    await state.update_data(date=str(clb.data))
+    await state.update_data(date=selected_date)
     message = await clb.message.edit_reply_markup(reply_markup=times_kb(times))
 
     await state.set_state(ContactForm.time_choose)

@@ -1,7 +1,12 @@
 import asyncio
+import json
 
 import aiosqlite
 import os
+
+from utils.config import load_config
+from utils.bot import bot
+from view.text import get_message
 
 DB_NAME = os.path.join(os.path.dirname(__file__), "DataBase.db")
 
@@ -21,9 +26,7 @@ async def create_tables():
                 website TEXT,
                 phone TEXT NOT NULL,
                 telegram TEXT NOT NULL UNIQUE,
-                meeting_times_14 TEXT NOT NULL,
-                meeting_times_15 TEXT NOT NULL,
-                paid TEXT,
+                meeting_times TEXT NOT NULL,
                 speaker_place TEXT
             )
         ''')
@@ -62,27 +65,33 @@ async def create_tables():
 
 
 async def save_contact_to_db(data):
-    meeting_times_14 = ",".join(data['meeting_times_14']) if None not in data['meeting_times_14'] else "отсутствуют"
-    meeting_times_15 = ",".join(data['meeting_times_15']) if None not in data['meeting_times_15'] else "отсутствуют"
-    zone = None if not data["speaker"] else data["zone"]
+    query = '''
+        INSERT INTO contacts (
+            contact_name, contact_position, company_name, 
+            activity_area, interests, description, 
+            website, phone, telegram, meeting_times,
+            speaker_place
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    '''
+    
     async with aiosqlite.connect(DB_NAME) as db:
-        await db.execute('''
-            INSERT INTO contacts (contact_name, contact_position, company_name, activity_area, interests, description, 
-                                  website, phone, telegram, speaker_place, meeting_times_14, meeting_times_15)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data['contact_name'], data['contact_position'], data['company_name'], ",".join(data['activity_area']),
-            ",".join(data['interests']), data['description'], data['website'], data['phone'], data['telegram'],
-            zone, meeting_times_14, meeting_times_15
+        await db.execute(query, (
+            data['contact_name'],
+            data['contact_position'],
+            data['company_name'],
+            json.dumps(data.get('activity_area', [])),
+            json.dumps(data.get('interests', [])),
+            data.get('description', ''),
+            data.get('website', ''),
+            data['phone'],
+            str(data['telegram']),
+            json.dumps(data.get('meeting_times', {})),
+            data.get('speaker_place', None)
         ))
         await db.commit()
 
 
 async def update_contact_in_db(data):
-    meeting_times_14 = ",".join(data['meeting_times_14']) if None not in data['meeting_times_14'] else "отсутствуют"
-    meeting_times_15 = ",".join(data['meeting_times_15']) if None not in data['meeting_times_15'] else "отсутствуют"
-    zone = None if not data["speaker"] else data["zone"]
-
     query = '''
         UPDATE contacts 
         SET 
@@ -94,9 +103,8 @@ async def update_contact_in_db(data):
             description = COALESCE(?, description),
             website = COALESCE(?, website),
             phone = COALESCE(?, phone),
-            speaker_place = COALESCE(?, speaker_place),
-            meeting_times_14 = COALESCE(?, meeting_times_14),
-            meeting_times_15 = COALESCE(?, meeting_times_15)
+            meeting_times = COALESCE(?, meeting_times),
+            speaker_place = COALESCE(?, speaker_place)
         WHERE telegram = ?
     '''
 
@@ -105,14 +113,13 @@ async def update_contact_in_db(data):
             data.get('contact_name'),
             data.get('contact_position'),
             data.get('company_name'),
-            ",".join(data.get('activity_area', [])) if 'activity_area' in data else None,
-            ",".join(data.get('interests', [])) if 'interests' in data else None,
+            json.dumps(data.get('activity_area', [])) if 'activity_area' in data else None,
+            json.dumps(data.get('interests', [])) if 'interests' in data else None,
             data.get('description'),
             data.get('website'),
             data.get('phone'),
-            zone,
-            meeting_times_14,
-            meeting_times_15,
+            json.dumps(data.get('meeting_times', {})) if 'meeting_times' in data else None,
+            data.get('speaker_place'),
             data['telegram']
         ))
         await db.commit()
@@ -154,42 +161,57 @@ async def get_contacts_by_meeting_time(day: int) -> list[dict]:
         return [dict(zip(columns, row)) for row in results]
 
 
-async def get_contacts_by_meeting_times_and_activity_area(meeting_times_14: list[str], meeting_times_15: list[str],
-                                                          activity_areas: list[str], telegram: str) -> list[dict]:
-    """Получает строки контактов, соответствующие условиям meeting_times_14, meeting_times_15 и activity_area."""
-
+async def get_contacts_by_meeting_times_and_activity_area(meeting_times: dict, activity_areas: list[str], telegram: str) -> list[dict]:
+    """
+    Получает контакты с совпадающими временами встреч и сферами деятельности.
+    
+    Args:
+        meeting_times (dict): Словарь с датами и временем {date: [times]}
+        activity_areas (list[str]): Список сфер деятельности
+        telegram (str): Telegram ID текущего пользователя (для исключения из результатов)
+        
+    Returns:
+        list[dict]: Список контактов с совпадающими временами и сферами деятельности
+    """
     async with aiosqlite.connect(DB_NAME) as conn:
-        meeting_time_conditions = []
-        values = []
-
-        if meeting_times_14:
-            meeting_time_conditions.append(' OR '.join([f"meeting_times_14 LIKE ?" for _ in meeting_times_14]))
-            for value in meeting_times_14:
-                values.append(f"%{value}%")
-
-        if meeting_times_15:
-            meeting_time_conditions.append(' OR '.join([f"meeting_times_15 LIKE ?" for _ in meeting_times_15]))
-            for value in meeting_times_15:
-                values.append(f"%{value}%")
-
-        activity_area_conditions = ' OR '.join([f"activity_area LIKE ?" for _ in activity_areas])
-        values.extend([f"%{area}%" for area in activity_areas])
-
-        query = f'''
-                    SELECT * FROM contacts 
-                    WHERE ({' OR '.join(meeting_time_conditions)}) 
-                    AND ({activity_area_conditions}) 
-                    AND telegram != ?
-                '''
-
-        values.append(str(telegram))
-
-        cursor = await conn.execute(query, values)
+        # Получаем всех пользователей, кроме текущего
+        cursor = await conn.execute("SELECT * FROM contacts WHERE telegram != ?", (str(telegram),))
         rows = await cursor.fetchall()
         columns = [col[0] for col in cursor.description]
-        await cursor.close()
+        
+        matching_contacts = []
+        for row in rows:
+            contact = dict(zip(columns, row))
+            try:
+                # Преобразуем JSON-строки в Python-объекты
+                contact_times = json.loads(contact['meeting_times'], strict=False)
+                contact_areas = json.loads(contact['activity_area'], strict=False)
 
-        return [dict(zip(columns, row)) for row in rows]
+                print(contact_areas, contact_times, meeting_times, activity_areas)
+                
+                # Проверяем совпадение хотя бы одной сферы д��ятельности
+                has_matching_area = any(area in contact_areas for area in activity_areas)
+                if not has_matching_area:
+                    continue
+                
+                # Проверяем совпадение хотя бы одного времени
+                has_matching_time = False
+                for date, times in meeting_times.items():
+                    contact_date_times = contact_times.get(date, [])
+                    if any(time in contact_date_times for time in times):
+                        has_matching_time = True
+                        break
+                
+                if has_matching_time:
+                    # Преобразуем JSON-строки для остальных полей
+                    contact['interests'] = json.loads(contact['interests'])
+                    matching_contacts.append(contact)
+                    
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"Error processing contact {contact.get('telegram')}: {e}")
+                continue
+                
+        return matching_contacts
 
 
 async def migrate_contacts_table():
@@ -210,17 +232,15 @@ async def migrate_contacts_table():
                 website TEXT,
                 phone TEXT NOT NULL,
                 telegram TEXT NOT NULL UNIQUE,
-                meeting_times_14 TEXT NOT NULL,
-                meeting_times_15 TEXT NOT NULL,
-                paid TEXT,
+                meeting_times JSON NOT NULL,
                 speaker_place TEXT
             )
         ''')
 
         # Копирование данных из старой таблицы в новую
         await cursor.execute('''
-            INSERT INTO new_contacts (id, contact_name, contact_position, company_name, activity_area, interests, description, website, phone, telegram, meeting_times_14, meeting_times_15)
-            SELECT id, contact_name, contact_position, company_name, activity_area, interests, description, website, phone, telegram, meeting_times_14, meeting_times_15
+            INSERT INTO new_contacts (id, contact_name, contact_position, company_name, activity_area, interests, description, website, phone, telegram, meeting_times, speaker_place)
+            SELECT id, contact_name, contact_position, company_name, activity_area, interests, description, website, phone, telegram, meeting_times, speaker_place
             FROM contacts
         ''')
 
@@ -348,7 +368,7 @@ async def update_meeting_status(meeting_id: int, new_status: int) -> bool:
 
 
 async def delete_meeting_by_id(meeting_id: int) -> bool:
-    """Удаляет встречу по ID и возвращает True, если встреча была удалена."""
+    """Удаляет встречу по ID и возвращает True, если встреча была удален."""
     query = '''
         DELETE FROM meetings 
         WHERE id = ?
@@ -395,7 +415,11 @@ async def get_meetings_with_status(status) -> list[dict]:
         return meetings
 
 
-async def delete_old_meetings(threshold_minutes=15):
+async def delete_old_meetings(threshold_minutes=None):
+    config = load_config()
+    if threshold_minutes is None:
+        threshold_minutes = config['settings']['threshold_minutes']
+        
     async with aiosqlite.connect(DB_NAME) as conn:
         cursor = await conn.cursor()
 
@@ -480,7 +504,7 @@ async def a_add_contact(**kwargs):
     - phone (str): Обязательный параметр.
     - telegram (str): Обязательный параметр, должен быть уникальным.
     - meeting_times_14 (str): Обязательный параметр.
-    - meeting_times_15 (str): Обязательный параметр.
+    - meeting_times_15 (str): Обязате��ьный параметр.
     - paid (str):
     - speaker_place (str):
 
@@ -604,3 +628,74 @@ async def a_update_meeting(meeting_id, **kwargs):
 async def drop_table():
     async with aiosqlite.connect(DB_NAME) as conn:
         cursor = await conn.execute("DROP TABLE IF EXISTS meetings")
+
+
+async def cleanup_outdated_contacts():
+    """
+    Удаляет контакты с устаревшими датами встреч и уведомляет пользователей.
+    Сравнивает даты в БД с датами из конфига.
+    """
+    from utils.config import load_config
+    from utils.bot import bot
+    from view.text import get_message
+    
+    config = load_config()
+    valid_dates = config['meeting']['dates']  # Получаем актуальные даты из конфига
+    
+    async with aiosqlite.connect(DB_NAME) as conn:
+        # Получаем все контакты
+        cursor = await conn.execute("SELECT id, telegram, meeting_times, contact_name FROM contacts")
+        rows = await cursor.fetchall()
+        
+        for row in rows:
+            contact_id, telegram, meeting_times, contact_name = row
+            try:
+                # Парсим JSON с датами встреч
+                times = json.loads(meeting_times)
+                contact_dates = set(times.keys())
+                
+                # Если есть даты, которых нет в конфиге - удаляем контакт
+                if not all(date in valid_dates for date in contact_dates):
+                    # Отправляем уведомление пользователю
+                    try:
+                        message = (
+                            f"Уважаемый(ая) {contact_name}!\n\n"
+                            "Даты проведения форума были изменены. "
+                            "Пожалуйста, пройдите регистрацию повторно, чтобы выбрать актуальные даты для встреч /start\n\n"
+                            f"Актуальные даты форума: {', '.join(valid_dates)}"
+                        )
+                        await bot.send_message(
+                            chat_id=telegram,
+                            text=message,
+                            parse_mode="HTML"
+                        )
+                        print(f"Уведомление отправлено контакту {telegram}")
+                    except Exception as e:
+                        print(f"Ошибка при отправке уведомления контакту {telegram}: {e}")
+                    
+                    # Удаляем контакт из базы
+                    await conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+                    print(f"Удален контакт {telegram} с устаревшими датами: {contact_dates}")
+            
+            except (json.JSONDecodeError, TypeError) as e:
+                print(f"Ошибка при обработке контакта {telegram}: {e}")
+                try:
+                    # Отправляем уведомление об ошибке и необходимости перерегистрации
+                    message = (
+                        f"Уважаемый(ая) {contact_name}!\n\n"
+                        "В вашей регистрационной записи обнаружена ошибка. "
+                        "Пожалуйста, пройдите регистрацию повторно.\n\n"
+                        f"Даты форума: {', '.join(valid_dates)}"
+                    )
+                    await bot.send_message(
+                        chat_id=telegram,
+                        text=message,
+                        parse_mode="HTML"
+                    )
+                except Exception as send_error:
+                    print(f"Ошибка при отправке уведомления контакту {telegram}: {send_error}")
+                
+                # Удаляем контакт с ошибочными данными
+                await conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+                
+        await conn.commit()

@@ -4,30 +4,51 @@ from aiogram.types import CallbackQuery, ReplyKeyboardRemove
 
 import utils.db.database as db
 from utils.fsm.states import ContactForm
-from utils.bot import dp, bot, threshold_minutes
+from utils.bot import dp, bot
+from utils.config import load_config
 from utils.fn import get_username_by_id, get_contacts, get_meetings_message, get_card
 from utils.handlers.swiping import reply_swipe
 from view.text import get_message, stickers
 from view.keyboard import delete_kb, number_kb, main_kb, rating_kb
+import json
+
+# Где нужен threshold_minutes, получаем его из конфига:
+config = load_config()
+threshold_minutes = config['settings']['threshold_minutes']
 
 
 @dp.callback_query(lambda c: c.data == 'change_info')
 async def callback_change_info(callback_query: CallbackQuery, state: FSMContext):
-    await callback_query.answer("Изменить информацию о себе")
-    await state.clear()
-    contact = await db.get_contact_by_telegram(str(callback_query.from_user.id))
-    if not contact:
-        await callback_query.message.answer(text=get_message("info_error"), parse_mode="HTML")
-        return
-    if "speaker_place" in contact:
-        if contact["speaker_place"]:
-            await state.update_data(speaker=True)
-        else:
-            await state.update_data(speaker=False)
-    else:
-        await state.update_data(speaker=False)
-    await callback_query.message.answer(get_message("fio"), reply_markup=ReplyKeyboardRemove())
-    await state.set_state(ContactForm.contact_name)
+    """
+    Обработчик для изменения информации - перенаправляет на регистрацию
+    """
+    try:
+        # Очищаем состояние
+        await state.clear()
+        
+        # От��равляем сообщение о начале регистрации
+        await callback_query.message.answer(
+            get_message("forum_info"), 
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        
+        # Запрашиваем ФИО
+        await callback_query.message.answer(
+            get_message("fio"),
+            parse_mode="HTML",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        
+        # Устанавливаем начальное состояние регистрации
+        await state.set_state(ContactForm.contact_name)
+        
+    except Exception as e:
+        print(f"Error in callback_change_info: {e}")
+        await callback_query.message.answer(
+            get_message("error"),
+            parse_mode="HTML"
+        )
 
 
 @dp.callback_query(lambda c: c.data == 'help')
@@ -43,7 +64,7 @@ async def callback_change_info(callback_query: CallbackQuery, state: FSMContext)
         await callback_query.answer("Не назначено встреч", show_alert=True)
         return
     await callback_query.answer("Мои встречи")
-    meetings = sorted(meetings, key=lambda x: int(x["date"]) * 21 + (int(x["time"][:2])) * 3 + int(x["time"][3]) // 2)
+    meetings = sorted(meetings, key=lambda x: x["date"])
     meetings = [meeting for meeting in meetings
                 if meeting["contact1_id"] == callback_query.from_user.id or
                 meeting["contact2_id"] == callback_query.from_user.id]
@@ -71,8 +92,8 @@ async def delete_meeting(clb: CallbackQuery, state: FSMContext):
         await clb.message.answer(text=get_message("info_error"), parse_mode="HTML")
         return
 
-    company = f"компании {contact2['company_name']}" if contact2['company_name'] != 'отсутствует' else ""
-    description = f"\nОписание: {contact2['description']}" if contact2['description'] != 'отсутствует' else ""
+    company = f"компании {contact2['company_name']}" if contact2['company_name'] != '/skip' else ""
+    description = f"\nОписание: {contact2['description']}" if contact2['description'] != '/skip' else ""
 
     message = (
         f"🕑 <b>{meeting['date']} ноября {meeting['time']}</b>\n"
@@ -125,13 +146,19 @@ async def yes_delete(callback_query: CallbackQuery, state: FSMContext):
 
     await db.update_meeting_status(meeting['id'], 1)
     await callback_query.answer("Удалено успешно")
+    message = f"Встреча @{username1} и @{username2} {date} в {time} отклонена"
+
 
     meetings = await db.get_meetings_with_status(0)
+
     if not meetings:
         await callback_query.answer("Нет встреч", show_alert=True)
+        await state.clear()
+        await callback_query.message.edit_text(text=message, parse_mode="HTML")
+        await callback_query.message.answer(text=get_message("bot_info"), parse_mode="HTML", reply_markup=main_kb)
         return
 
-    meetings = sorted(meetings, key=lambda x: int(x["date"]) * 21 + (int(x["time"][:2])) * 3 + int(x["time"][3]) // 2)
+    meetings = sorted(meetings, key=lambda x: (x["date"], x["time"]))
     meetings = [meeting for meeting in meetings
                 if meeting["contact1_id"] == callback_query.from_user.id or
                 meeting["contact2_id"] == callback_query.from_user.id]
@@ -143,7 +170,6 @@ async def yes_delete(callback_query: CallbackQuery, state: FSMContext):
 
     await callback_query.message.edit_text(text=message, reply_markup=number_kb(len(meetings)), parse_mode="HTML")
 
-    message = f"Встреча @{username1} и @{username2} {date} ноября в {time} отклонена"
     try:
         await bot.send_message(chat_id=telegram1, text=message)
     except TelegramForbiddenError:
@@ -202,14 +228,15 @@ async def callback_change_info(callback_query: CallbackQuery, state: FSMContext)
     if not user:
         await callback_query.message.answer(text=get_message("info_error"))
         return
-    interests = user["interests"].split(",")
-    meeting_times_14, meeting_times_15 = user["meeting_times_14"].split(","), user["meeting_times_15"].split(",")
-    meeting_times_14 = [str(i) for i in range(10, 17)] if "отсутствуют" in meeting_times_14 else meeting_times_14
-    meeting_times_14.append("отсутствуют")
-    meeting_times_15 = [str(i) for i in range(10, 17)] if "отсутствуют" in meeting_times_15 else meeting_times_15
-    meeting_times_15.append("отсутствуют")
-    users = await db.get_contacts_by_meeting_times_and_activity_area(meeting_times_14, meeting_times_15, interests,
-                                                                     callback_query.from_user.id)
+    interests = json.loads(user["interests"], strict=False)
+    meeting_times = json.loads(user["meeting_times"], strict=False)
+    
+    users = await db.get_contacts_by_meeting_times_and_activity_area(
+        meeting_times,
+        interests,
+        callback_query.from_user.id
+    )
+    
     await state.set_state(ContactForm.set_meeting)
     await reply_swipe(callback_query, [[await get_card(user), user['telegram']] for user in users])
 
@@ -230,7 +257,7 @@ async def callback_YES(callback_query: CallbackQuery, state: FSMContext):
         print(e)
         await callback_query.message.answer(text=get_message("error"), parse_mode="HTML")
 
-    message = f"Назначена встреча @{username1} и @{username2} {date} ноября в {time}, место встречи: <b>{meeting['place']}</b>"
+    message = f"Назначена встреча @{username1} и @{username2} {date} в {time}, место встречи: <b>{meeting['place']}</b>"
     try:
         await bot.send_message(chat_id=telegram2, text=message, parse_mode="HTML")
         await bot.send_sticker(chat_id=telegram2, sticker=stickers["okey"])
@@ -238,7 +265,6 @@ async def callback_YES(callback_query: CallbackQuery, state: FSMContext):
         pass
 
     await state.clear()
-
     await callback_query.message.delete()
     await callback_query.message.answer(text=message, parse_mode="HTML")
     await callback_query.message.answer_sticker(stickers["okey"])
@@ -265,7 +291,7 @@ async def callback_NO(callback_query: CallbackQuery, state: FSMContext):
         print(e)
         await callback_query.message.answer(text=get_message("error"), parse_mode="HTML")
 
-    message = f"Встреча @{username1} и @{username2} {date} ноября в {time} отклонена"
+    message = f"Встреча @{username1} и @{username2} {date} в {time} отклонена"
 
     await callback_query.message.edit_text(text=message)
     await callback_query.message.answer_sticker(stickers["time"])

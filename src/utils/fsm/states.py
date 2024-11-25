@@ -20,3 +20,4 @@ class ContactForm(StatesGroup):
     set_place = State()
     time_choose = State()
     end_time_choose = State()
+    meeting_times = State()
